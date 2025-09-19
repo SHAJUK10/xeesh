@@ -424,4 +424,4 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
       )}
     </div>
   );
-}}
+}
