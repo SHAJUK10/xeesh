@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { ProjectCard } from '../Projects/ProjectCard';
@@ -30,12 +30,11 @@ interface EmployeeDashboardProps {
 
 export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboardProps) {
   const { user } = useAuth();
-  const { projects, commentTasks, stages, users } = useData();
+  const { projects, commentTasks, stages, users, refreshUsers } = useData();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterPriority, setFilterPriority] = useState('all');
-  // const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showProjectDetail, setShowProjectDetail] = useState(false);
   const [projectDetailTab, setProjectDetailTab] = useState('tasks');
 
@@ -47,7 +46,7 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
   // Get tasks assigned to current employee
   const myTasks = commentTasks.filter(task => 
     task.assigned_to === user?.id || 
-    (assignedProjects.some(p => p.id === task.project_id) && task.author_role !== 'employee')
+    (assignedProjects.some(p => p.id === task.project_id) && task.status !== 'done')
   );
 
   const openTasks = myTasks.filter(task => task.status === 'open');
@@ -79,11 +78,25 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
     setProjectDetailTab('tasks');
   };
 
+  // Refresh data manually if needed
+  const handleRefresh = () => {
+    refreshUsers();
+  };
+
   const renderMyTasks = () => (
     <div className="space-y-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">My Tasks</h2>
-        <p className="text-gray-600">Track and complete your assigned tasks</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">My Tasks</h2>
+          <p className="text-gray-600">Track and complete your assigned tasks</p>
+        </div>
+        <button
+          onClick={handleRefresh}
+          className="text-green-600 hover:text-green-900 transition-colors flex items-center space-x-1"
+        >
+          <RefreshCw className="w-4 h-4" />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Quick Stats */}
@@ -298,15 +311,6 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
     );
   };
 
-  // Show project detail if selected
-  if (showProjectDetail && selectedProject) {
-    return (
-      <div className="p-6">
-        {renderProjectDetail()}
-      </div>
-    );
-  }
-
   const renderProjects = () => {
     // Get actual employees from users data
     const employees = users.filter(u => u.role === 'employee');
@@ -318,6 +322,13 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
             <h2 className="text-3xl font-bold text-gray-900 mb-2">My Projects</h2>
             <p className="text-gray-600 text-lg">Projects assigned to me</p>
           </div>
+          <button
+            onClick={handleRefresh}
+            className="text-green-600 hover:text-green-900 transition-colors flex items-center space-x-1"
+          >
+            <RefreshCw className="w-4 h-4" />
+            <span>Refresh</span>
+          </button>
         </div>
 
         {/* Filters */}
