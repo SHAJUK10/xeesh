@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useData } from '../../context/DataContext';
 import { Project } from '../../types';
@@ -7,10 +7,7 @@ import { StorageManager } from '../Storage/StorageManager';
 import { CommentManager } from '../Comments/CommentManager';
 import { BrochureDesign } from '../Brochure/BrochureDesign';
 import { ClientFeedbackReport } from '../Reports/ClientFeedbackReport';
-import { 
-  CheckSquare, Layers, Upload, MessageSquare, Eye, TrendingUp, Clock, CheckCircle, 
-  BarChart3, Briefcase, FileText, User, Calendar 
-} from 'lucide-react';
+import { CheckSquare, Layers, Upload, MessageSquare, Eye, TrendingUp, Clock, CheckCircle, BarChart3, Briefcase, FileText, User, Calendar } from 'lucide-react';
 
 interface ClientDashboardProps {
   activeView: string;
@@ -19,24 +16,18 @@ interface ClientDashboardProps {
 
 export function ClientDashboard({ activeView, onViewChange }: ClientDashboardProps) {
   const { user } = useAuth();
-  const { projects, stages, commentTasks, brochureProjects, users } = useData();
+  const { projects, stages, commentTasks, brochureProjects } = useData();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showProjectDetail, setShowProjectDetail] = useState(false);
   const [projectDetailTab, setProjectDetailTab] = useState('stages');
   const [showFeedbackReport, setShowFeedbackReport] = useState(false);
-  const [selectedBrochureProject, setSelectedBrochureProject] = useState<any>(null); // Adjust type if BrochureProject is defined
+  const [selectedBrochureProject, setSelectedBrochureProject] = useState(null);
 
   // Get client's projects
   const clientProjects = projects.filter(project => project.client_id === user?.id);
+  const clientProject = clientProjects[0]; // Focus on first project for simplicity
 
-  useEffect(() => {
-    // Ensure selectedProject is valid when projects change
-    if (!selectedProject && clientProjects.length > 0) {
-      setSelectedProject(clientProjects[0]);
-    }
-  }, [projects, selectedProject, clientProjects]);
-
-  if (clientProjects.length === 0) {
+  if (!clientProject) {
     return (
       <div className="p-6">
         <div className="text-center py-12">
@@ -50,12 +41,12 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
     );
   }
 
-  const projectStages = stages.filter(stage => stage.project_id === (selectedProject?.id || clientProjects[0].id))
+  const projectStages = stages.filter(stage => stage.project_id === clientProject.id)
                             .sort((a, b) => a.order - b.order);
   
   const pendingApprovals = projectStages.filter(stage => stage.approval_status === 'pending');
   const openTasks = commentTasks.filter(task => 
-    task.project_id === (selectedProject?.id || clientProjects[0].id) && 
+    task.project_id === clientProject.id && 
     task.author_role === 'client' && 
     task.status === 'open'
   );
@@ -79,36 +70,36 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
       {/* Project Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-900">{selectedProject?.title || clientProjects[0].title}</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{clientProject.title}</h1>
           <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-            (selectedProject || clientProjects[0]).status === 'active' ? 'bg-green-100 text-green-800' :
-            (selectedProject || clientProjects[0]).status === 'completed' ? 'bg-blue-100 text-blue-800' :
+            clientProject.status === 'active' ? 'bg-green-100 text-green-800' :
+            clientProject.status === 'completed' ? 'bg-blue-100 text-blue-800' :
             'bg-yellow-100 text-yellow-800'
           }`}>
-            {(selectedProject || clientProjects[0]).status}
+            {clientProject.status}
           </span>
         </div>
-        <p className="text-gray-600 mb-4">{selectedProject?.description || clientProjects[0].description}</p>
+        <p className="text-gray-600 mb-4">{clientProject.description}</p>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <Clock className="w-4 h-4" />
-            <span>Deadline: {new Date((selectedProject || clientProjects[0]).deadline).toLocaleDateString()}</span>
+            <span>Deadline: {new Date(clientProject.deadline).toLocaleDateString()}</span>
           </div>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <TrendingUp className="w-4 h-4" />
-            <span>Progress: {(selectedProject || clientProjects[0]).progress_percentage}%</span>
+            <span>Progress: {clientProject.progress_percentage}%</span>
           </div>
           <div className="flex items-center space-x-2 text-sm text-gray-600">
             <CheckCircle className="w-4 h-4" />
-            <span>Client: {(selectedProject || clientProjects[0]).client_name}</span>
+            <span>Client: {clientProject.client_name}</span>
           </div>
         </div>
 
         <div className="w-full bg-gray-200 rounded-full h-3">
           <div
             className="h-3 bg-red-600 rounded-full transition-all duration-300"
-            style={{ width: `${(selectedProject || clientProjects[0]).progress_percentage}%` }}
+            style={{ width: `${clientProject.progress_percentage}%` }}
           />
         </div>
       </div>
@@ -207,14 +198,6 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
               <CheckSquare className="w-4 h-4" />
               <span>View Brochure Feedback Report</span>
             </button>
-            <div className="mt-2 text-sm text-gray-600">
-              Assigned Employees: {
-                users
-                  .filter(u => (selectedProject || clientProjects[0]).assigned_employees.includes(u.id))
-                  .map(u => u.name)
-                  .join(', ') || 'None assigned'
-              }
-            </div>
           </div>
         )}
       </div>

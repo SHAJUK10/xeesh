@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Project, User } from '../../types';
 import { X, Calendar, Users, Plus } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -8,68 +8,43 @@ interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   project?: Project | null;
-  users: User[]; // Renamed from employees to match broader context
-  onSave?: (projectData: Partial<Project>) => Promise<void>; // Optional save callback
+  employees: User[];
 }
 
-export function ProjectModal({ isOpen, onClose, project, users, onSave }: ProjectModalProps) {
+export function ProjectModal({ isOpen, onClose, project, employees }: ProjectModalProps) {
   const { user } = useAuth();
   const { createProject, updateProject } = useData();
   
   const [formData, setFormData] = useState({
     title: project?.title || '',
     description: project?.description || '',
-    client_id: project?.client_id || '',
-    client_name: project?.client_name || '',
-    deadline: project?.deadline ? new Date(project.deadline).toISOString().split('T')[0] : '', // Format as YYYY-MM-DD
+    client_id: project?.client_id || '3', // Default to demo client
+    client_name: project?.client_name || 'Priya Sharma',
+    deadline: project?.deadline || '',
     assigned_employees: project?.assigned_employees || [],
     priority: project?.priority || 'medium'
   });
-  const [clients, setClients] = useState<User[]>([]);
-
-  // Filter clients from users list
-  useEffect(() => {
-    const clientUsers = users.filter(u => u.role === 'client');
-    setClients(clientUsers);
-    
-    // Set default client if none selected and clients available
-    if (!formData.client_id && clientUsers.length > 0) {
-      setFormData(prev => ({
-        ...prev,
-        client_id: clientUsers[0].id,
-        client_name: clientUsers[0].name
-      }));
-    }
-  }, [users, formData.client_id]);
 
   if (!isOpen) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const projectData = {
-      title: formData.title,
-      description: formData.description,
-      client_id: formData.client_id,
-      client_name: formData.client_name,
-      deadline: formData.deadline,
-      assigned_employees: formData.assigned_employees,
-      priority: formData.priority,
-      progress_percentage: project ? project.progress_percentage : 0,
-      status: project ? project.status : 'active'
-    };
-
-    try {
-      if (project && updateProject) {
-        await updateProject(project.id, projectData);
-      } else if (createProject && onSave) {
-        await createProject(projectData); // Let DataContext handle timestamps
-        await onSave(projectData); // Notify parent to refresh
-      }
-      onClose();
-    } catch (error) {
-      console.error('Error saving project:', error);
-      alert('Failed to save project. Please try again.');
+    
+    if (project) {
+      updateProject(project.id, {
+        ...formData,
+        progress_percentage: project.progress_percentage,
+        status: project.status
+      });
+    } else {
+      createProject({
+        ...formData,
+        progress_percentage: 0,
+        status: 'active'
+      });
     }
+    
+    onClose();
   };
 
   const handleEmployeeToggle = (employeeId: string) => {
@@ -78,15 +53,6 @@ export function ProjectModal({ isOpen, onClose, project, users, onSave }: Projec
       assigned_employees: prev.assigned_employees.includes(employeeId)
         ? prev.assigned_employees.filter(id => id !== employeeId)
         : [...prev.assigned_employees, employeeId]
-    }));
-  };
-
-  const handleClientChange = (clientId: string) => {
-    const selectedClient = clients.find(c => c.id === clientId);
-    setFormData(prev => ({
-      ...prev,
-      client_id: clientId,
-      client_name: selectedClient?.name || ''
     }));
   };
 
@@ -135,24 +101,6 @@ export function ProjectModal({ isOpen, onClose, project, users, onSave }: Projec
           </div>
 
           <div>
-            <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-2">
-              Client
-            </label>
-            <select
-              id="client"
-              value={formData.client_id}
-              onChange={(e) => handleClientChange(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              required
-            >
-              <option value="">Select a client</option>
-              {clients.map(client => (
-                <option key={client.id} value={client.id}>{client.name} ({client.email})</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
             <label htmlFor="deadline" className="block text-sm font-medium text-gray-700 mb-2">
               Deadline
             </label>
@@ -175,7 +123,7 @@ export function ProjectModal({ isOpen, onClose, project, users, onSave }: Projec
                 Assign Employees
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                {users.filter(u => u.role === 'employee').map(employee => (
+                {employees.filter(emp => emp.role === 'employee').map(employee => (
                   <label key={employee.id} className="flex items-center space-x-3 cursor-pointer p-2 rounded hover:bg-gray-50">
                     <input
                       type="checkbox"
@@ -218,7 +166,6 @@ export function ProjectModal({ isOpen, onClose, project, users, onSave }: Projec
             <button
               type="submit"
               className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
-              disabled={!formData.title || !formData.client_id || !formData.deadline}
             >
               {project ? 'Update' : 'Create'} Project
             </button>
