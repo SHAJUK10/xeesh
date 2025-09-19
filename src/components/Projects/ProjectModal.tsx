@@ -18,12 +18,28 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
   const [formData, setFormData] = useState({
     title: project?.title || '',
     description: project?.description || '',
-    client_id: project?.client_id || '3', // Default to demo client
-    client_name: project?.client_name || 'Priya Sharma',
+    client_id: project?.client_id || '',
+    client_name: project?.client_name || '',
     deadline: project?.deadline || '',
     assigned_employees: project?.assigned_employees || [],
     priority: project?.priority || 'medium'
   });
+  const [clients, setClients] = useState<User[]>([]);
+
+  // Filter clients from employees list
+  useEffect(() => {
+    const clientUsers = employees.filter(emp => emp.role === 'client');
+    setClients(clientUsers);
+    
+    // Set default client if none selected and clients available
+    if (!formData.client_id && clientUsers.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        client_id: clientUsers[0].id,
+        client_name: clientUsers[0].name
+      }));
+    }
+  }, [employees, formData.client_id]);
 
   if (!isOpen) return null;
 
@@ -53,6 +69,15 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
       assigned_employees: prev.assigned_employees.includes(employeeId)
         ? prev.assigned_employees.filter(id => id !== employeeId)
         : [...prev.assigned_employees, employeeId]
+    }));
+  };
+
+  const handleClientChange = (clientId: string) => {
+    const selectedClient = clients.find(c => c.id === clientId);
+    setFormData(prev => ({
+      ...prev,
+      client_id: clientId,
+      client_name: selectedClient?.name || ''
     }));
   };
 
@@ -98,6 +123,24 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
+          </div>
+
+          <div>
+            <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-2">
+              Client
+            </label>
+            <select
+              id="client"
+              value={formData.client_id}
+              onChange={(e) => handleClientChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="">Select a client</option>
+              {clients.map(client => (
+                <option key={client.id} value={client.id}>{client.name} ({client.email})</option>
+              ))}
+            </select>
           </div>
 
           <div>
