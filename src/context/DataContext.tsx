@@ -19,8 +19,8 @@ interface DataContextType {
   pageComments: PageComment[];
   leads: Lead[];
   downloadHistory: DownloadHistory[];
-  createProject: (project: Omit<Project, 'id' | 'created_at'>) => void;
-  updateProject: (id: string, updates: Partial<Project>) => void;
+  createProject: (project: Omit<Project, 'id' | 'created_at' | 'updated_at'>) => Promise<void>;
+  updateProject: (id: string, updates: Partial<Project>) => Promise<void>;
   addCommentTask: (data: Omit<CommentTask, 'id' | 'timestamp'>) => void;
   addGlobalComment: (data: Omit<GlobalComment, 'id' | 'timestamp'>) => void;
   updateCommentTaskStatus: (taskId: string, status: 'open' | 'in-progress' | 'done') => void;
@@ -75,6 +75,7 @@ const mockProjects: Project[] = [
     progress_percentage: 65,
     assigned_employees: ['2', '4'],
     created_at: '2025-01-01',
+    updated_at: '2025-01-01',
     status: 'active',
     priority: 'high'
   },
@@ -88,6 +89,7 @@ const mockProjects: Project[] = [
     progress_percentage: 30,
     assigned_employees: ['2'],
     created_at: '2025-01-10',
+    updated_at: '2025-01-10',
     status: 'active',
     priority: 'medium'
   }
@@ -236,7 +238,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const loadProjectsFromSupabase = async () => {
     if (!supabase) return;
-    
+
     try {
       const { data: projectsData, error } = await supabase
         .from('projects')
@@ -244,9 +246,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           *,
           client:profiles!projects_client_id_fkey(id, full_name)
         `);
-      
+
       if (error) {
-        console.error('Error loading projects:', error);
+        console.error('Error loading projects:', error.message);
         return;
       }
 
@@ -257,29 +259,30 @@ export function DataProvider({ children }: { children: ReactNode }) {
         client_id: p.client_id,
         client_name: p.client?.full_name || 'Unknown Client',
         deadline: p.deadline,
-        progress_percentage: p.progress_percentage,
+        progress_percentage: p.progress_percentage || 0,
         assigned_employees: p.assigned_employees || [],
         created_at: p.created_at,
-        status: p.status,
-        priority: p.priority
+        updated_at: p.updated_at || p.created_at,
+        status: p.status || 'active',
+        priority: p.priority || 'medium'
       }));
 
       setProjects(mappedProjects);
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('Unexpected error loading projects:', error);
     }
   };
 
   const loadUsersFromSupabase = async () => {
     if (!supabase) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('profiles')
         .select('id, full_name, role, email');
-      
+
       if (error) {
-        console.error('Error loading users:', error);
+        console.error('Error loading users:', error.message);
         return;
       }
 
@@ -292,32 +295,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       setUsers(mappedUsers);
     } catch (error) {
-      console.error('Error loading users:', error);
+      console.error('Unexpected error loading users:', error);
     }
   };
 
   const setupRealtimeSubscriptions = () => {
     if (!supabase) return;
 
-    // Subscribe to projects changes
     const projectsSubscription = supabase
       .channel('projects_changes')
       .on('postgres_changes', 
         { event: '*', schema: 'public', table: 'projects' },
-        (payload) => {
-          console.log('Projects change received:', payload);
+        () => {
           loadProjectsFromSupabase();
         }
       )
       .subscribe();
 
-    // Subscribe to profiles changes
     const profilesSubscription = supabase
       .channel('profiles_changes')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'profiles' },
-        (payload) => {
-          console.log('Profiles change received:', payload);
+        () => {
           loadUsersFromSupabase();
         }
       )
@@ -346,7 +345,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       alert(upsertErr.message);
       return null;
     }
-    // Refresh users from Supabase to get the latest data
     await loadUsersFromSupabase();
     return { id: userId };
   };
@@ -359,7 +357,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (supabase) {
       loadUsersFromSupabase();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Auto-generate stages for new projects
@@ -392,7 +389,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const file = files.find(f => f.id === fileId);
     if (!file || !user) return;
 
-    // Update download count and last downloaded info
     setFiles(prev => prev.map(f => 
       f.id === fileId 
         ? { 
@@ -404,7 +400,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         : f
     ));
 
-    // Add to download history
     const historyEntry: DownloadHistory = {
       id: uuidv4(),
       file_id: fileId,
@@ -416,7 +411,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     };
     setDownloadHistory(prev => [...prev, historyEntry]);
 
-    // Trigger actual download
     const link = document.createElement('a');
     link.href = file.file_url;
     link.download = file.filename;
@@ -427,9 +421,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!user) return;
 
     const filesToDownload = files.filter(f => fileIds.includes(f.id));
-    
-    // In a real implementation, this would create a zip file on the server
-    // For now, we'll download files individually
     filesToDownload.forEach(file => {
       setTimeout(() => downloadFile(file.id), 100);
     });
@@ -440,8 +431,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .filter(entry => {
         const file = files.find(f => f.id === entry.file_id);
         if (!file) return false;
-        
-        // Filter based on user role and project access
         if (user?.role === 'manager') return true;
         if (user?.role === 'employee') {
           const project = projects.find(p => p.id === file.project_id);
@@ -458,79 +447,76 @@ export function DataProvider({ children }: { children: ReactNode }) {
     ));
   };
 
-  const createProject = async (projectData: Omit<Project, 'id' | 'created_at'>) => {
-    if (supabase) {
-      try {
-        const { data, error } = await supabase
-          .from('projects')
-          .insert({
-            title: projectData.title,
-            description: projectData.description,
-            client_id: projectData.client_id,
-            deadline: projectData.deadline,
-            progress_percentage: projectData.progress_percentage,
-            assigned_employees: projectData.assigned_employees,
-            status: projectData.status,
-            priority: projectData.priority
-          })
-          .select()
-          .single();
-
-        if (error) {
-          console.error('Error creating project:', error);
-          alert('Failed to create project: ' + error.message);
-          return;
-        }
-
-        // The realtime subscription will handle updating the local state
-        console.log('Project created successfully:', data);
-      } catch (error) {
-        console.error('Error creating project:', error);
-        alert('Failed to create project');
-      }
-    } else {
-      // Fallback to local state if Supabase is not configured
+  const createProject = async (projectData: Omit<Project, 'id' | 'created_at' | 'updated_at'>) => {
+    if (!supabase) {
       const newProject: Project = {
         ...projectData,
         id: uuidv4(),
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
       setProjects(prev => [...prev, newProject]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          title: projectData.title,
+          description: projectData.description,
+          client_id: projectData.client_id,
+          client_name: projectData.client_name,
+          deadline: projectData.deadline,
+          progress_percentage: projectData.progress_percentage,
+          assigned_employees: projectData.assigned_employees,
+          status: projectData.status,
+          priority: projectData.priority,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select();
+
+      if (error) {
+        console.error('Error creating project:', error.message);
+        alert('Failed to create project: ' + error.message);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setProjects(prev => [...prev, data[0]]);
+      }
+    } catch (error) {
+      console.error('Unexpected error creating project:', error);
+      alert('Failed to create project');
     }
   };
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
-    if (supabase) {
-      try {
-        const { error } = await supabase
-          .from('projects')
-          .update({
-            title: updates.title,
-            description: updates.description,
-            client_id: updates.client_id,
-            deadline: updates.deadline,
-            progress_percentage: updates.progress_percentage,
-            assigned_employees: updates.assigned_employees,
-            status: updates.status,
-            priority: updates.priority
-          })
-          .eq('id', id);
-
-        if (error) {
-          console.error('Error updating project:', error);
-          alert('Failed to update project: ' + error.message);
-          return;
-        }
-
-        // The realtime subscription will handle updating the local state
-        console.log('Project updated successfully');
-      } catch (error) {
-        console.error('Error updating project:', error);
-        alert('Failed to update project');
-      }
-    } else {
-      // Fallback to local state if Supabase is not configured
+    if (!supabase) {
       setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('projects')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error updating project:', error.message);
+        alert('Failed to update project: ' + error.message);
+        return;
+      }
+
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates, updated_at: new Date().toISOString() } : p));
+    } catch (error) {
+      console.error('Unexpected error updating project:', error);
+      alert('Failed to update project');
     }
   };
 
@@ -593,7 +579,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (supabase) await supabase.from('files').insert(newFile);
   };
 
-  // Fix for FileManager component - handle File object upload
   const uploadFileFromInput = (stageId: string, file: globalThis.File, uploaderName: string) => {
     const fileType = file.name.split('.').pop()?.toLowerCase() || 'unknown';
     const newFile: File = {
@@ -660,7 +645,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       pages: []
     };
     setBrochureProjects(prev => [...prev, newProject]);
-    // Optionally persist in Supabase table 'brochure_projects'
     if (supabase) supabase.from('brochure_projects').insert(newProject);
     return newProject.id;
   };
@@ -678,7 +662,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
     );
 
     if (existingPageIndex >= 0) {
-      // Update existing page
       setBrochurePages(prev => prev.map((page, index) => 
         index === existingPageIndex 
           ? { ...page, content: pageData.content, updated_at: new Date().toISOString() }
@@ -686,7 +669,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       ));
       if (supabase) await supabase.from('brochure_pages').update({ content: pageData.content, updated_at: new Date().toISOString() }).eq('id', brochurePages[existingPageIndex].id);
     } else {
-      // Create new page
       const newPage: BrochurePage = {
         ...pageData,
         approval_status: pageData.approval_status ?? 'pending',
@@ -734,7 +716,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
       page.id === pageId ? { ...page, approval_status: status, updated_at: new Date().toISOString() } : page
     ));
     
-    // Add approval action comment
     const actionText = status === 'approved' 
       ? `Page has been approved by ${user?.name || 'Manager'}${comment ? `: ${comment}` : ''}`
       : `Page requires changes - ${user?.name || 'Manager'}${comment ? `: ${comment}` : ''}`;
