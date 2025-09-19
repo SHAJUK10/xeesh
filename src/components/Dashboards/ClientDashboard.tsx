@@ -16,7 +16,7 @@ interface ClientDashboardProps {
 
 export function ClientDashboard({ activeView, onViewChange }: ClientDashboardProps) {
   const { user } = useAuth();
-  const { projects, stages, commentTasks, brochureProjects } = useData();
+  const { projects, stages, commentTasks, brochureProjects, users } = useData();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [showProjectDetail, setShowProjectDetail] = useState(false);
   const [projectDetailTab, setProjectDetailTab] = useState('stages');
@@ -197,7 +197,14 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
             >
               <CheckSquare className="w-4 h-4" />
               <span>View Brochure Feedback Report</span>
-            </button>
+            <span>
+              {project.assigned_employees.length} employee(s): {
+                users
+                  .filter(u => project.assigned_employees.includes(u.id))
+                  .map(u => u.name)
+                  .join(', ') || 'None assigned'
+              }
+            </span>
           </div>
         )}
       </div>

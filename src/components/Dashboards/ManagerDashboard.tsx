@@ -33,13 +33,6 @@ import {
   FileText
 } from 'lucide-react';
 
-// Mock employees data
-const mockEmployees: User[] = [
-  { id: '2', name: 'Rakesh Gupta', email: 'employee@xeetrack.com', role: 'employee' },
-  { id: '4', name: 'Meera Iyer', email: 'meera@xeetrack.com', role: 'employee' },
-  { id: '6', name: 'Amit Patel', email: 'amit@xeetrack.com', role: 'employee' }
-];
-
 interface ManagerDashboardProps {
   activeView: string;
   onViewChange: (view: string) => void;
@@ -288,7 +281,7 @@ export function ManagerDashboard({ activeView, onViewChange }: ManagerDashboardP
             className="pl-10 pr-8 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm"
           >
             <option value="all">All Employees</option>
-            {mockEmployees.map(employee => (
+            {users.filter(u => u.role === 'employee').map(employee => (
               <option key={employee.id} value={employee.id}>{employee.name}</option>
             ))}
           </select>
@@ -327,7 +320,7 @@ export function ManagerDashboard({ activeView, onViewChange }: ManagerDashboardP
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredProjects.map(project => {
-                const assignedEmployeeNames = mockEmployees
+                const assignedEmployeeNames = users
                   .filter(emp => project.assigned_employees.includes(emp.id))
                   .map(emp => emp.name);
 

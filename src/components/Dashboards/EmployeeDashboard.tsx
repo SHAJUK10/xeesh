@@ -30,7 +30,7 @@ interface EmployeeDashboardProps {
 
 export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboardProps) {
   const { user } = useAuth();
-  const { projects, commentTasks, stages } = useData();
+  const { projects, commentTasks, stages, users } = useData();
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -308,12 +308,8 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
   }
 
   const renderProjects = () => {
-    // Mock employees data for filtering (same as Manager)
-    const mockEmployees = [
-      { id: '2', name: 'Rakesh Gupta', email: 'employee@xeetrack.com', role: 'employee' },
-      { id: '4', name: 'Meera Iyer', email: 'meera@xeetrack.com', role: 'employee' },
-      { id: '6', name: 'Amit Patel', email: 'amit@xeetrack.com', role: 'employee' }
-    ];
+    // Get actual employees from users data
+    const employees = users.filter(u => u.role === 'employee');
 
     return (
       <div className="space-y-8">
