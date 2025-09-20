@@ -8,43 +8,54 @@ interface ProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
   project?: Project | null;
-  employees: User[];
 }
 
-export function ProjectModal({ isOpen, onClose, project, employees }: ProjectModalProps) {
+export function ProjectModal({ isOpen, onClose, project }: ProjectModalProps) {
   const { user } = useAuth();
-  const { createProject, updateProject } = useData();
+  const { createProject, updateProject, users } = useData();
   
   const [formData, setFormData] = useState({
     title: project?.title || '',
     description: project?.description || '',
-    client_id: project?.client_id || '3', // Default to demo client
-    client_name: project?.client_name || 'Priya Sharma',
+    client_id: project?.client_id || '',
     deadline: project?.deadline || '',
     assigned_employees: project?.assigned_employees || [],
     priority: project?.priority || 'medium'
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    if (project) {
-      updateProject(project.id, {
-        ...formData,
-        progress_percentage: project.progress_percentage,
-        status: project.status
-      });
-    } else {
-      createProject({
-        ...formData,
-        progress_percentage: 0,
-        status: 'active'
-      });
+    try {
+      const selectedClient = users.find(u => u.id === formData.client_id);
+      
+      if (project) {
+        await updateProject(project.id, {
+          ...formData,
+          client_name: selectedClient?.name || 'Unknown Client',
+          progress_percentage: project.progress_percentage,
+          status: project.status
+        });
+      } else {
+        await createProject({
+          ...formData,
+          client_name: selectedClient?.name || 'Unknown Client',
+          progress_percentage: 0,
+          status: 'active'
+        });
+      }
+      
+      onClose();
+    } catch (error) {
+      console.error('Error saving project:', error);
+      alert('Error saving project. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
-    
-    onClose();
   };
 
   const handleEmployeeToggle = (employeeId: string) => {
@@ -55,6 +66,9 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
         : [...prev.assigned_employees, employeeId]
     }));
   };
+
+  const employees = users.filter(u => u.role === 'employee');
+  const clients = users.filter(u => u.role === 'client');
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -98,6 +112,24 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               required
             />
+          </div>
+
+          <div>
+            <label htmlFor="client" className="block text-sm font-medium text-gray-700 mb-2">
+              Client
+            </label>
+            <select
+              id="client"
+              value={formData.client_id}
+              onChange={(e) => setFormData(prev => ({ ...prev, client_id: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              required
+            >
+              <option value="">Select a client</option>
+              {clients.map(client => (
+                <option key={client.id} value={client.id}>{client.name} ({client.email})</option>
+              ))}
+            </select>
           </div>
 
           <div>
@@ -165,9 +197,10 @@ export function ProjectModal({ isOpen, onClose, project, employees }: ProjectMod
             </button>
             <button
               type="submit"
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+              disabled={isSubmitting}
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white rounded-lg font-medium transition-colors"
             >
-              {project ? 'Update' : 'Create'} Project
+              {isSubmitting ? 'Saving...' : (project ? 'Update' : 'Create')} Project
             </button>
           </div>
         </form>

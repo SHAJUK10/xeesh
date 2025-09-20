@@ -25,9 +25,9 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
 
   // Get client's projects
   const clientProjects = projects.filter(project => project.client_id === user?.id);
-  const clientProject = clientProjects[0]; // Focus on first project for simplicity
-
-  if (!clientProject) {
+  
+  // Show message if no projects assigned
+  if (activeView === 'dashboard' && clientProjects.length === 0) {
     return (
       <div className="p-6">
         <div className="text-center py-12">
@@ -41,12 +41,14 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
     );
   }
 
-  const projectStages = stages.filter(stage => stage.project_id === clientProject.id)
+  const clientProject = clientProjects[0]; // Focus on first project for dashboard
+
+  const projectStages = stages.filter(stage => stage.project_id === clientProject?.id)
                             .sort((a, b) => a.order - b.order);
   
-  const pendingApprovals = projectStages.filter(stage => stage.approval_status === 'pending');
+  const pendingApprovals = clientProject ? projectStages.filter(stage => stage.approval_status === 'pending') : [];
   const openTasks = commentTasks.filter(task => 
-    task.project_id === clientProject.id && 
+    clientProject && task.project_id === clientProject.id && 
     task.author_role === 'client' && 
     task.status === 'open'
   );
@@ -67,6 +69,16 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
         <p className="text-gray-600">Overview of your project progress and activities</p>
       </div>
 
+      {!clientProject ? (
+        <div className="text-center py-12">
+          <div className="w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Layers className="w-12 h-12 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No projects assigned</h3>
+          <p className="text-gray-600">Contact your project manager to get started</p>
+        </div>
+      ) : (
+        <>
       {/* Project Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
@@ -201,6 +213,8 @@ export function ClientDashboard({ activeView, onViewChange }: ClientDashboardPro
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 

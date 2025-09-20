@@ -3,6 +3,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Project, Stage, CommentTask, GlobalComment, File, Task, Meeting, BrochureProject, BrochurePage, PageComment, Lead, STAGE_NAMES, DownloadHistory, User } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
+import { supabase as externalSupabase } from '../superBaseClient';
 
 interface DataContextType {
   projects: Project[];
@@ -50,17 +51,13 @@ interface DataContextType {
   unlockBrochurePage: (pageId: string) => void;
   createUserAccount: (params: { email: string; password: string; full_name: string; role: 'employee' | 'client' }) => Promise<{ id: string } | null>;
   refreshUsers: () => Promise<void>;
+  loadProjects: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 // Supabase client
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-let supabase: SupabaseClient | null = null;
-if (supabaseUrl && supabaseAnonKey) {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-}
+let supabase: SupabaseClient | null = externalSupabase;
 
 // Enhanced mock data with Indian names
 const mockProjects: Project[] = [
@@ -254,8 +251,63 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loadProjects = async () => {
+    if (!supabase) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select(`
+          *,
+          client:profiles!projects_client_id_fkey(full_name)
+        `);
+      
+      if (!error && data) {
+        const mappedProjects: Project[] = data.map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          description: p.description || '',
+          client_id: p.client_id,
+          client_name: p.client?.full_name || 'Unknown Client',
+          deadline: p.deadline,
+          progress_percentage: p.progress_percentage,
+          assigned_employees: p.assigned_employees || [],
+          created_at: p.created_at,
+          status: p.status,
+          priority: p.priority
+        }));
+        setProjects(mappedProjects);
+      }
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    }
+  };
+
   useEffect(() => {
     refreshUsers();
+    loadProjects();
+    
+    // Set up real-time subscriptions
+    if (supabase) {
+      const projectsSubscription = supabase
+        .channel('projects')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, () => {
+          loadProjects();
+        })
+        .subscribe();
+
+      const profilesSubscription = supabase
+        .channel('profiles')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+          refreshUsers();
+        })
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(projectsSubscription);
+        supabase.removeChannel(profilesSubscription);
+      };
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -356,21 +408,90 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const createProject = async (projectData: Omit<Project, 'id' | 'created_at'>) => {
-    const newProject: Project = {
-      ...projectData,
-      id: uuidv4(),
-      created_at: new Date().toISOString()
-    };
-    setProjects(prev => [...prev, newProject]);
     if (supabase) {
-      await supabase.from('projects').insert(newProject);
+      try {
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            title: projectData.title,
+            description: projectData.description,
+            client_id: projectData.client_id,
+            deadline: projectData.deadline,
+            progress_percentage: projectData.progress_percentage,
+            assigned_employees: projectData.assigned_employees,
+            status: projectData.status,
+            priority: projectData.priority
+          })
+          .select()
+          .single();
+
+        if (error) {
+          console.error('Error creating project:', error);
+          throw error;
+        }
+
+        // Create default stages for the new project
+        if (data) {
+          const stageInserts = STAGE_NAMES.map((stageName, index) => ({
+            project_id: data.id,
+            name: stageName,
+            notes: '',
+            progress_percentage: 0,
+            approval_status: 'pending',
+            order: index
+          }));
+
+          await supabase.from('stages').insert(stageInserts);
+        }
+
+        // Refresh projects to get the updated list
+        await loadProjects();
+      } catch (error) {
+        console.error('Error creating project:', error);
+        throw error;
+      }
+    } else {
+      // Fallback to local state if Supabase is not available
+      const newProject: Project = {
+        ...projectData,
+        id: uuidv4(),
+        created_at: new Date().toISOString()
+      };
+      setProjects(prev => [...prev, newProject]);
     }
   };
 
   const updateProject = async (id: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
     if (supabase) {
-      await supabase.from('projects').update(updates).eq('id', id);
+      try {
+        const { error } = await supabase
+          .from('projects')
+          .update({
+            title: updates.title,
+            description: updates.description,
+            client_id: updates.client_id,
+            deadline: updates.deadline,
+            progress_percentage: updates.progress_percentage,
+            assigned_employees: updates.assigned_employees,
+            status: updates.status,
+            priority: updates.priority
+          })
+          .eq('id', id);
+
+        if (error) {
+          console.error('Error updating project:', error);
+          throw error;
+        }
+
+        // Refresh projects to get the updated list
+        await loadProjects();
+      } catch (error) {
+        console.error('Error updating project:', error);
+        throw error;
+      }
+    } else {
+      // Fallback to local state if Supabase is not available
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
     }
   };
 
@@ -701,7 +822,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       lockBrochurePage,
       unlockBrochurePage,
       createUserAccount,
-      refreshUsers
+      refreshUsers,
+      loadProjects
     }}>
       {children}
     </DataContext.Provider>

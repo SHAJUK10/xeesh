@@ -308,13 +308,6 @@ export function EmployeeDashboard({ activeView, onViewChange }: EmployeeDashboar
   }
 
   const renderProjects = () => {
-    // Mock employees data for filtering (same as Manager)
-    const mockEmployees = [
-      { id: '2', name: 'Rakesh Gupta', email: 'employee@xeetrack.com', role: 'employee' },
-      { id: '4', name: 'Meera Iyer', email: 'meera@xeetrack.com', role: 'employee' },
-      { id: '6', name: 'Amit Patel', email: 'amit@xeetrack.com', role: 'employee' }
-    ];
-
     return (
       <div className="space-y-8">
         <div className="flex justify-between items-center">
